@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1877F2">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ادھار کھاتہ">
   <title>ادھار کھاتہ | Ktk Store</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -66,56 +72,111 @@
       <div class="stat-value" id="totalCustomers">0</div>
       <div class="stat-label">کل کسٹمرز</div>
     </div>
-    <div class="stat-card accent">
+    <div class="stat-card accent" id="totalCard">
       <div class="stat-value" id="totalOutstanding">₨ 0</div>
-      <div class="stat-label">کل بقایا</div>
+      <div class="stat-label" id="totalLabel">کل بقایا</div>
     </div>
   </section>
 
-  <section class="card">
-    <div class="card-header">
-      <h2>نیا بل بنائیں</h2>
-    </div>
+  <!-- ============ PAGE: NEW BILL ============ -->
+  <div id="pageBill" class="page">
+    <section class="card">
+      <div class="card-header">
+        <h2>نیا بل بنائیں</h2>
+      </div>
 
-    <div class="input-group">
-      <span class="input-icon">👤</span>
-      <input type="text" id="customerName" placeholder="کسٹمر کا نام" list="customerNames" autocomplete="off">
-      <datalist id="customerNames"></datalist>
-    </div>
+      <div class="input-group">
+        <span class="input-icon">👤</span>
+        <input type="text" id="customerName" placeholder="کسٹمر کا نام" list="customerNames" autocomplete="off">
+        <datalist id="customerNames"></datalist>
+      </div>
 
-    <div class="input-group">
-      <span class="input-icon">📱</span>
-      <input type="tel" id="customerPhone" placeholder="واٹس ایپ نمبر (923001234567)">
-    </div>
+      <div class="input-group">
+        <span class="input-icon">📱</span>
+        <input type="tel" id="customerPhone" placeholder="واٹس ایپ نمبر (923001234567)">
+      </div>
 
-    <div class="balance-card">
-      <div class="balance-label">پچھلا بقایا</div>
-      <div class="balance-value">₨ <span id="previousBalance">0</span></div>
-    </div>
+      <div class="balance-card" id="prevBalanceCard">
+        <div class="balance-label" id="prevBalanceLabel">پچھلا بقایا</div>
+        <div class="balance-value">₨ <span id="previousBalance">0</span></div>
+      </div>
 
-    <div class="section-title">
-      <span>آئٹمز</span>
-      <button type="button" id="addItemBtn" class="btn-mini">+ آئٹم شامل کریں</button>
-    </div>
-    <div id="itemsContainer"></div>
+      <div class="section-title">
+        <span>آئٹمز</span>
+        <button type="button" id="addItemBtn" class="btn-mini">+ آئٹم شامل کریں</button>
+      </div>
+      <div id="itemsContainer"></div>
 
-    <div class="input-group">
-      <span class="input-icon">💵</span>
-      <input type="number" id="paymentAmount" placeholder="ادائیگی (اگر کی ہو)" value="0">
-    </div>
+      <div class="input-group">
+        <span class="input-icon">💵</span>
+        <input type="number" id="paymentAmount" placeholder="ادائیگی (اگر کی ہو)" value="0">
+      </div>
 
-    <button id="generateBillBtn" class="btn-primary">بل بنائیں</button>
-  </section>
+      <button id="generateBillBtn" class="btn-primary">بل بنائیں</button>
+    </section>
 
-  <section id="billPreviewWrapper" class="card" style="display:none;">
-    <div id="billPreview"></div>
-    <div class="action-row">
-      <button id="shareWhatsappBtn" class="btn-whatsapp">📲 واٹس ایپ پر بھیجیں</button>
-      <button id="newBillBtn" class="btn-secondary">نیا بل</button>
+    <section id="billPreviewWrapper" class="card" style="display:none;">
+      <div id="billPreview"></div>
+      <div class="action-row">
+        <button id="shareWhatsappBtn" class="btn-whatsapp">📲 واٹس ایپ پر بھیجیں</button>
+        <button id="newBillBtn" class="btn-secondary">نیا بل</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ PAGE: CUSTOMERS ============ -->
+  <div id="pageCustomers" class="page" style="display:none;">
+    <section class="card">
+      <div class="card-header">
+        <h2>کسٹمرز</h2>
+        <input type="text" id="searchCustomer" class="search-input" placeholder="🔍 تلاش کریں...">
+      </div>
+      <div id="customersList" class="customers-list">
+        <p class="empty-msg">لوڈ ہو رہا ہے...</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ CUSTOMER DETAIL MODAL ============ -->
+  <div id="customerModal" class="modal" style="display:none;">
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalCustomerName">کسٹمر</h3>
+        <button id="closeModalBtn" class="close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-stat-row">
+          <div class="modal-stat">
+            <div class="modal-stat-label">فون</div>
+            <div class="modal-stat-value" id="modalPhone">—</div>
+          </div>
+          <div class="modal-stat">
+            <div class="modal-stat-label" id="modalBalanceLabel">بقایا</div>
+            <div class="modal-stat-value" id="modalBalance">₨ 0</div>
+          </div>
+        </div>
+        <h4 class="modal-section-title">لین دین کی تاریخ</h4>
+        <div id="transactionsList" class="transactions-list">
+          <p class="empty-msg">کوئی لین دین نہیں</p>
+        </div>
+      </div>
     </div>
-  </section>
+  </div>
 
 </div>
+
+<!-- ============ BOTTOM NAVIGATION ============ -->
+<nav id="bottomNav" class="bottom-nav" style="display:none;">
+  <button class="nav-item active" data-page="bill">
+    <span class="nav-icon">📝</span>
+    <span class="nav-label">نیا بل</span>
+  </button>
+  <button class="nav-item" data-page="customers">
+    <span class="nav-icon">👥</span>
+    <span class="nav-label">کسٹمرز</span>
+  </button>
+</nav>
 
 <script type="module" src="app.js"></script>
 </body>
