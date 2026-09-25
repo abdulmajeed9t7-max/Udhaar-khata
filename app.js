@@ -1,19 +1,30 @@
 import { db, auth } from './firebase-config.js';
 import {
-  collection, addDoc, getDocs, query, where, limit, doc, updateDoc
+  collection, addDoc, getDocs, query, where, limit, doc, updateDoc, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-// ⚠️ اپنی دکان کی معلومات یہاں لکھیں
+// ⚠️ اپنی دکان کی معلومات
 const SHOP_NAME = "Ktk Store";
 const SHOP_PHONE = "0300-1234567";
+const BILL_NOTE = "ادھار کی صورت میں بل ضرور لیں — شکریہ";
+
+// ============ PWA: Service Worker Register ============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then((reg) => console.log('SW registered:', reg.scope))
+      .catch((err) => console.log('SW fail:', err));
+  });
+}
 
 // ============ Elements ============
 const loginScreen = document.getElementById('loginScreen');
 const mainApp = document.getElementById('mainApp');
+const bottomNav = document.getElementById('bottomNav');
 const loginEmail = document.getElementById('loginEmail');
 const loginPassword = document.getElementById('loginPassword');
 const loginBtn = document.getElementById('loginBtn');
@@ -24,9 +35,14 @@ const userEmail = document.getElementById('userEmail');
 const tabLogin = document.getElementById('tabLogin');
 const tabSignup = document.getElementById('tabSignup');
 
+const pageBill = document.getElementById('pageBill');
+const pageCustomers = document.getElementById('pageCustomers');
+
 const customerName = document.getElementById('customerName');
 const customerPhone = document.getElementById('customerPhone');
 const previousBalanceEl = document.getElementById('previousBalance');
+const prevBalanceCard = document.getElementById('prevBalanceCard');
+const prevBalanceLabel = document.getElementById('prevBalanceLabel');
 const itemsContainer = document.getElementById('itemsContainer');
 const addItemBtn = document.getElementById('addItemBtn');
 const paymentAmount = document.getElementById('paymentAmount');
@@ -38,11 +54,39 @@ const newBillBtn = document.getElementById('newBillBtn');
 const customerNamesList = document.getElementById('customerNames');
 const totalCustomersEl = document.getElementById('totalCustomers');
 const totalOutstandingEl = document.getElementById('totalOutstanding');
+const totalCard = document.getElementById('totalCard');
+const totalLabel = document.getElementById('totalLabel');
+
+const customersListEl = document.getElementById('customersList');
+const searchCustomer = document.getElementById('searchCustomer');
+
+const customerModal = document.getElementById('customerModal');
+const modalOverlay = document.getElementById('modalOverlay');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const modalCustomerName = document.getElementById('modalCustomerName');
+const modalPhone = document.getElementById('modalPhone');
+const modalBalance = document.getElementById('modalBalance');
+const modalBalanceLabel = document.getElementById('modalBalanceLabel');
+const transactionsList = document.getElementById('transactionsList');
 
 let previousBalance = 0;
 let lastBillData = null;
+let allCustomers = [];
 
-// ============ Tab Switch ============
+// ============ Helpers ============
+function formatMoney(n) {
+  return Number(n || 0).toLocaleString('en-PK');
+}
+
+function balanceInfo(balance) {
+  const b = Number(balance) || 0;
+  if (b < 0) {
+    return { label: 'ایڈوانس', value: Math.abs(b), className: 'advance' };
+  }
+  return { label: 'بقایا', value: b, className: 'credit' };
+}
+
+// ============ Tab Switch (Login/Signup) ============
 tabLogin.addEventListener('click', () => {
   tabLogin.classList.add('active');
   tabSignup.classList.remove('active');
@@ -50,7 +94,6 @@ tabLogin.addEventListener('click', () => {
   signupBtn.style.display = 'none';
   loginError.textContent = '';
 });
-
 tabSignup.addEventListener('click', () => {
   tabSignup.classList.add('active');
   tabLogin.classList.remove('active');
@@ -59,7 +102,7 @@ tabSignup.addEventListener('click', () => {
   loginError.textContent = '';
 });
 
-// ============ Login ============
+// ============ Login / Signup ============
 loginBtn.addEventListener('click', async () => {
   loginError.textContent = '';
   const email = loginEmail.value.trim();
@@ -74,13 +117,11 @@ loginBtn.addEventListener('click', async () => {
     await signInWithEmailAndPassword(auth, email, pass);
   } catch (e) {
     loginError.textContent = 'غلط ای میل یا پاسورڈ';
-    console.error(e);
   }
   loginBtn.textContent = 'لاگ ان کریں';
   loginBtn.disabled = false;
 });
 
-// ============ Signup ============
 signupBtn.addEventListener('click', async () => {
   loginError.textContent = '';
   const email = loginEmail.value.trim();
@@ -97,13 +138,11 @@ signupBtn.addEventListener('click', async () => {
     loginError.textContent = e.code === 'auth/email-already-in-use'
       ? 'یہ ای میل پہلے سے موجود ہے'
       : 'مسئلہ: ' + e.message;
-    console.error(e);
   }
   signupBtn.textContent = 'نیا اکاؤنٹ بنائیں';
   signupBtn.disabled = false;
 });
 
-// ============ Logout ============
 logoutBtn.addEventListener('click', async () => {
   if (confirm('کیا آپ واقعی لاگ آؤٹ کرنا چاہتے ہیں؟')) {
     await signOut(auth);
@@ -115,18 +154,43 @@ onAuthStateChanged(auth, (user) => {
   if (user) {
     loginScreen.style.display = 'none';
     mainApp.style.display = 'block';
+    bottomNav.style.display = 'flex';
     userEmail.textContent = user.email;
-    loadCustomerNames();
-    loadStats();
+    refreshAll();
   } else {
     loginScreen.style.display = 'flex';
     mainApp.style.display = 'none';
+    bottomNav.style.display = 'none';
     loginEmail.value = '';
     loginPassword.value = '';
   }
 });
 
-// ============ Customer names list ============
+async function refreshAll() {
+  await loadCustomerNames();
+  await loadStats();
+  await loadCustomersList();
+}
+
+// ============ Bottom Nav ============
+document.querySelectorAll('.nav-item').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    const page = btn.dataset.page;
+    if (page === 'bill') {
+      pageBill.style.display = 'block';
+      pageCustomers.style.display = 'none';
+    } else {
+      pageBill.style.display = 'none';
+      pageCustomers.style.display = 'block';
+      loadCustomersList();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+
+// ============ Load customer names (datalist) ============
 async function loadCustomerNames() {
   customerNamesList.innerHTML = '';
   try {
@@ -136,12 +200,10 @@ async function loadCustomerNames() {
       opt.value = d.data().name;
       customerNamesList.appendChild(opt);
     });
-  } catch (e) {
-    console.error(e);
-  }
+  } catch (e) { console.error(e); }
 }
 
-// ============ Stats ============
+// ============ Load stats ============
 async function loadStats() {
   try {
     const snap = await getDocs(collection(db, "customers"));
@@ -152,16 +214,156 @@ async function loadStats() {
       outstanding += Number(d.data().balance) || 0;
     });
     totalCustomersEl.textContent = total;
-    totalOutstandingEl.textContent = '₨ ' + outstanding.toLocaleString();
+    if (outstanding < 0) {
+      totalOutstandingEl.textContent = '₨ ' + formatMoney(Math.abs(outstanding));
+      totalLabel.textContent = 'کل ایڈوانس';
+      totalCard.classList.add('green');
+    } else {
+      totalOutstandingEl.textContent = '₨ ' + formatMoney(outstanding);
+      totalLabel.textContent = 'کل بقایا';
+      totalCard.classList.remove('green');
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ============ Load customers list ============
+async function loadCustomersList() {
+  customersListEl.innerHTML = '<p class="empty-msg">لوڈ ہو رہا ہے...</p>';
+  try {
+    const snap = await getDocs(collection(db, "customers"));
+    allCustomers = [];
+    snap.forEach((d) => {
+      allCustomers.push({ id: d.id, ...d.data() });
+    });
+    allCustomers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    renderCustomersList(allCustomers);
   } catch (e) {
     console.error(e);
+    customersListEl.innerHTML = '<p class="empty-msg">لوڈ کرنے میں مسئلہ ہوا</p>';
   }
 }
+
+function renderCustomersList(list) {
+  if (list.length === 0) {
+    customersListEl.innerHTML = '<p class="empty-msg">ابھی کوئی کسٹمر نہیں</p>';
+    return;
+  }
+  customersListEl.innerHTML = '';
+  list.forEach((c) => {
+    const info = balanceInfo(c.balance);
+    const div = document.createElement('div');
+    div.className = 'customer-item';
+    div.innerHTML = `
+      <div class="customer-info">
+        <div class="customer-name">${c.name || 'بے نام'}</div>
+        <div class="customer-phone">${c.phone || '—'}</div>
+      </div>
+      <div class="customer-balance ${info.className}">
+        <div class="amount">₨ ${formatMoney(info.value)}</div>
+        <div class="label">${info.label}</div>
+      </div>
+    `;
+    div.addEventListener('click', () => openCustomerModal(c));
+    customersListEl.appendChild(div);
+  });
+}
+
+// Search filter
+searchCustomer.addEventListener('input', () => {
+  const q = searchCustomer.value.trim().toLowerCase();
+  if (!q) {
+    renderCustomersList(allCustomers);
+    return;
+  }
+  const filtered = allCustomers.filter((c) =>
+    (c.name || '').toLowerCase().includes(q) ||
+    (c.phone || '').includes(q)
+  );
+  renderCustomersList(filtered);
+});
+
+// ============ Customer Detail Modal ============
+async function openCustomerModal(customer) {
+  modalCustomerName.textContent = customer.name || 'کسٹمر';
+  modalPhone.textContent = customer.phone || '—';
+
+  const info = balanceInfo(customer.balance);
+  modalBalance.textContent = '₨ ' + formatMoney(info.value);
+  modalBalanceLabel.textContent = info.label;
+  modalBalance.className = 'modal-stat-value ' + info.className;
+
+  customerModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  transactionsList.innerHTML = '<p class="empty-msg">لوڈ ہو رہا ہے...</p>';
+
+  try {
+    const q = query(
+      collection(db, "transactions"),
+      where("customerName", "==", customer.name)
+    );
+    const snap = await getDocs(q);
+    const txns = [];
+    snap.forEach((d) => txns.push(d.data()));
+    txns.sort((a, b) => {
+      const da = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+      const db_ = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+      return db_ - da;
+    });
+
+    if (txns.length === 0) {
+      transactionsList.innerHTML = '<p class="empty-msg">کوئی لین دین نہیں</p>';
+      return;
+    }
+
+    transactionsList.innerHTML = '';
+    txns.forEach((t) => {
+      const date = t.date?.toDate ? t.date.toDate() : new Date(t.date);
+      const dateStr = date.toLocaleDateString('en-GB');
+      const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+      const itemsText = (t.items || []).length > 0
+        ? (t.items || []).map((it) => `${it.name} × ${it.qty}`).join(' • ')
+        : 'کوئی آئٹم نہیں';
+
+      const div = document.createElement('div');
+      div.className = 'transaction-item';
+      div.innerHTML = `
+        <div class="transaction-header">
+          <span>${dateStr} — ${timeStr}</span>
+          <span class="transaction-amount credit">ادھار: ₨ ${formatMoney(t.billTotal)}</span>
+        </div>
+        ${t.payment > 0 ? `<div class="transaction-header"><span></span><span class="transaction-amount payment">ادائیگی: ₨ ${formatMoney(t.payment)}</span></div>` : ''}
+        <div class="transaction-detail">${itemsText}</div>
+        <div class="transaction-detail">
+          پچھلا: ₨ ${formatMoney(t.previousBalance)} → اب: ₨ ${formatMoney(t.currentBalance)}
+        </div>
+      `;
+      transactionsList.appendChild(div);
+    });
+  } catch (e) {
+    console.error(e);
+    transactionsList.innerHTML = '<p class="empty-msg">لین دین لوڈ نہیں ہو سکے</p>';
+  }
+}
+
+function closeModal() {
+  customerModal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+closeModalBtn.addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', closeModal);
 
 // ============ Auto-load previous balance ============
 customerName.addEventListener('change', async () => {
   const name = customerName.value.trim();
-  if (!name) return;
+  if (!name) {
+    previousBalance = 0;
+    prevBalanceCard.classList.remove('advance');
+    prevBalanceLabel.textContent = 'پچھلا بقایا';
+    previousBalanceEl.textContent = '0';
+    return;
+  }
   try {
     const q = query(collection(db, "customers"), where("name", "==", name), limit(1));
     const snap = await getDocs(q);
@@ -172,10 +374,15 @@ customerName.addEventListener('change', async () => {
     } else {
       previousBalance = 0;
     }
-    previousBalanceEl.textContent = previousBalance.toLocaleString();
-  } catch (e) {
-    console.error(e);
-  }
+    const info = balanceInfo(previousBalance);
+    previousBalanceEl.textContent = formatMoney(info.value);
+    prevBalanceLabel.textContent = 'پچھلا ' + info.label;
+    if (info.className === 'advance') {
+      prevBalanceCard.classList.add('advance');
+    } else {
+      prevBalanceCard.classList.remove('advance');
+    }
+  } catch (e) { console.error(e); }
 });
 
 // ============ Add item row ============
@@ -184,8 +391,8 @@ function addItemRow() {
   row.className = 'item-row';
   row.innerHTML = `
     <input type="text" placeholder="آئٹم" class="item-name">
-    <input type="number" placeholder="تعداد" class="item-qty" value="1" min="1">
-    <input type="number" placeholder="ریٹ" class="item-rate">
+    <input type="number" placeholder="تعداد" class="item-qty" value="1" min="0" step="any">
+    <input type="number" placeholder="ریٹ" class="item-rate" step="any">
     <button type="button" class="remove-btn">×</button>
   `;
   row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
@@ -199,10 +406,7 @@ generateBillBtn.addEventListener('click', async () => {
   const phone = customerPhone.value.trim();
   const payment = Number(paymentAmount.value) || 0;
 
-  if (!name) {
-    alert('کسٹمر کا نام لکھیں');
-    return;
-  }
+  if (!name) { alert('کسٹمر کا نام لکھیں'); return; }
 
   const items = [];
   document.querySelectorAll('.item-row').forEach((row) => {
@@ -213,6 +417,11 @@ generateBillBtn.addEventListener('click', async () => {
       items.push({ name: itemName, qty, rate, amount: qty * rate });
     }
   });
+
+  if (items.length === 0 && payment === 0) {
+    alert('کوئی آئٹم یا ادائیگی درج کریں');
+    return;
+  }
 
   const billTotal = items.reduce((s, i) => s + i.amount, 0);
   const currentBalance = previousBalance + billTotal - payment;
@@ -226,11 +435,11 @@ generateBillBtn.addEventListener('click', async () => {
       customerName: name,
       customerPhone: phone,
       date: billDate,
-      items: items,
-      previousBalance: previousBalance,
-      billTotal: billTotal,
-      payment: payment,
-      currentBalance: currentBalance,
+      items,
+      previousBalance,
+      billTotal,
+      payment,
+      currentBalance,
       userEmail: auth.currentUser.email
     });
 
@@ -243,20 +452,18 @@ generateBillBtn.addEventListener('click', async () => {
       });
     } else {
       await addDoc(collection(db, "customers"), {
-        name: name,
-        phone: phone,
-        balance: currentBalance,
-        createdAt: billDate
+        name, phone, balance: currentBalance, createdAt: billDate
       });
     }
 
     lastBillData = {
-      name, phone, items, previousBalance, billTotal, payment,
-      currentBalance, date: billDate
+      name, phone, items, previousBalance, billTotal,
+      payment, currentBalance, date: billDate
     };
     renderBillPreview(lastBillData);
     loadCustomerNames();
     loadStats();
+    loadCustomersList();
   } catch (e) {
     console.error(e);
     alert('محفوظ کرنے میں مسئلہ: ' + e.message);
@@ -275,10 +482,14 @@ function renderBillPreview(data) {
     <tr>
       <td>${it.name}</td>
       <td>${it.qty}</td>
-      <td>${it.rate}</td>
-      <td>${it.amount}</td>
+      <td>${formatMoney(it.rate)}</td>
+      <td>${formatMoney(it.amount)}</td>
     </tr>
   `).join('');
+
+  const info = balanceInfo(data.currentBalance);
+  const totalClass = info.className === 'advance' ? 'total-row advance' : 'total-row';
+  const totalLabel = info.className === 'advance' ? 'کل ایڈوانس' : 'کل بقایا';
 
   billPreview.innerHTML = `
     <div class="header">
@@ -298,11 +509,12 @@ function renderBillPreview(data) {
       </tbody>
     </table>
     <div class="summary">
-      <div class="row"><span>پچھلا بقایا</span><span>₨ ${data.previousBalance.toLocaleString()}</span></div>
-      <div class="row"><span>آج کا ادھار</span><span>₨ ${data.billTotal.toLocaleString()}</span></div>
-      <div class="row"><span>ادائیگی</span><span>− ₨ ${data.payment.toLocaleString()}</span></div>
-      <div class="row total-row"><span>کل بقایا</span><span>₨ ${data.currentBalance.toLocaleString()}</span></div>
+      <div class="row"><span>پچھلا بقایا</span><span>₨ ${formatMoney(data.previousBalance)}</span></div>
+      <div class="row"><span>آج کا ادھار</span><span>₨ ${formatMoney(data.billTotal)}</span></div>
+      <div class="row"><span>ادائیگی</span><span>− ₨ ${formatMoney(data.payment)}</span></div>
+      <div class="row ${totalClass}"><span>${totalLabel}</span><span>₨ ${formatMoney(info.value)}</span></div>
     </div>
+    <div class="note">💡 ${BILL_NOTE}</div>
     <div class="footer">شکریہ! دوبارہ تشریف لائیں 🌟</div>
   `;
 
@@ -318,22 +530,17 @@ shareWhatsappBtn.addEventListener('click', async () => {
 
   try {
     const canvas = await html2canvas(billPreview, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true
+      scale: 2, backgroundColor: '#ffffff', useCORS: true
     });
     const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
     const file = new File([blob], `bill-${lastBillData.name}.png`, { type: 'image/png' });
 
-    const message = `السلام علیکم ${lastBillData.name}\nآپ کا کل بقایا: ₨ ${lastBillData.currentBalance}\n\nشکریہ — ${SHOP_NAME}`;
+    const info = balanceInfo(lastBillData.currentBalance);
+    const message = `السلام علیکم ${lastBillData.name}\nآپ کا ${info.label}: ₨ ${formatMoney(info.value)}\n\nشکریہ — ${SHOP_NAME}`;
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({
-          files: [file],
-          title: 'بل',
-          text: message
-        });
+        await navigator.share({ files: [file], title: 'بل', text: message });
       } catch (err) {
         if (err.name !== 'AbortError') console.log('Share error', err);
       }
@@ -366,6 +573,8 @@ newBillBtn.addEventListener('click', () => {
   customerPhone.value = '';
   previousBalanceEl.textContent = '0';
   previousBalance = 0;
+  prevBalanceLabel.textContent = 'پچھلا بقایا';
+  prevBalanceCard.classList.remove('advance');
   itemsContainer.innerHTML = '';
   addItemRow();
   paymentAmount.value = '0';
@@ -374,5 +583,5 @@ newBillBtn.addEventListener('click', () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-// پہلی قطار شامل کریں
+// پہلی قطار
 addItemRow();
