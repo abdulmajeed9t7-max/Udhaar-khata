@@ -2,22 +2,34 @@
 <html lang="ur" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#1877F2">
+  <meta name="description" content="پروفیشنل ادھار کھاتہ ایپ">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ادھار کھاتہ">
-  <title>ادھار کھاتہ | Ktk Store</title>
+  <title>ادھار کھاتہ PRO | Ktk Store</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
+<!-- ============ SPLASH SCREEN ============ -->
+<div id="splashScreen" class="splash-screen">
+  <div class="splash-logo">
+    <svg viewBox="0 0 24 24" fill="white" width="60" height="60">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="2" fill="none" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <h1 class="splash-title">ادھار کھاتہ</h1>
+  <div class="splash-loader"><span></span></div>
+</div>
+
 <!-- ============ LOGIN SCREEN ============ -->
-<div id="loginScreen" class="login-screen">
+<div id="loginScreen" class="login-screen" style="display:none;">
   <div class="login-header">
     <div class="logo-circle">
       <svg viewBox="0 0 24 24" fill="white" width="42" height="42">
@@ -44,6 +56,10 @@
       <input type="password" id="loginPassword" placeholder="پاسورڈ لکھیں" autocomplete="current-password">
     </div>
 
+    <div class="login-options" id="forgotPasswordRow" style="display:none;">
+      <a href="#" id="forgotPasswordLink" class="link-text">پاسورڈ بھول گئے؟</a>
+    </div>
+
     <p id="loginError" class="error-msg"></p>
 
     <button id="loginBtn" class="btn-primary">لاگ ان کریں</button>
@@ -56,33 +72,70 @@
 <!-- ============ MAIN APP ============ -->
 <div id="mainApp" class="main-app" style="display:none;">
 
+  <!-- HEADER -->
   <header class="app-header">
     <div class="header-left">
-      <div class="header-avatar">K</div>
+      <div class="header-avatar" id="headerAvatar">K</div>
       <div>
-        <div class="header-title">ادھار کھاتہ</div>
+        <div class="header-title" id="headerTitle">ادھار کھاتہ</div>
         <div class="header-sub" id="userEmail">—</div>
       </div>
     </div>
     <button id="logoutBtn" class="logout-btn" title="لاگ آؤٹ">⏻</button>
   </header>
 
-  <section class="stats-row">
-    <div class="stat-card">
-      <div class="stat-value" id="totalCustomers">0</div>
-      <div class="stat-label">کل کسٹمرز</div>
-    </div>
-    <div class="stat-card accent" id="totalCard">
-      <div class="stat-value" id="totalOutstanding">₨ 0</div>
-      <div class="stat-label" id="totalLabel">کل بقایا</div>
-    </div>
-  </section>
+  <!-- ============ PAGE: DASHBOARD ============ -->
+  <div id="pageDashboard" class="page">
+    <section class="stats-grid">
+      <div class="stat-card accent" id="statTotalCard">
+        <div class="stat-icon">💰</div>
+        <div class="stat-value" id="statTotalBalance">₨ 0</div>
+        <div class="stat-label" id="statTotalLabel">کل بقایا</div>
+      </div>
+      <div class="stat-card" id="statCustomersCard">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value" id="statTotalCustomers">0</div>
+        <div class="stat-label">کل کسٹمرز</div>
+      </div>
+      <div class="stat-card" id="statTodayCard">
+        <div class="stat-icon">📅</div>
+        <div class="stat-value" id="statTodaySales">₨ 0</div>
+        <div class="stat-label">آج کا ادھار</div>
+      </div>
+      <div class="stat-card" id="statTodayPaymentCard">
+        <div class="stat-icon">💵</div>
+        <div class="stat-value" id="statTodayPayment">₨ 0</div>
+        <div class="stat-label">آج کی وصولی</div>
+      </div>
+    </section>
 
-  <!-- ============ PAGE: NEW BILL ============ -->
-  <div id="pageBill" class="page">
     <section class="card">
       <div class="card-header">
-        <h2>نیا بل بنائیں</h2>
+        <h2>📋 حالیہ لین دین</h2>
+        <button class="btn-link" id="viewAllTransactions">سب دیکھیں</button>
+      </div>
+      <div id="recentTransactionsList" class="recent-list">
+        <p class="empty-msg">لوڈ ہو رہا ہے...</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>⭐ زیادہ بقایا والے کسٹمرز</h2>
+        <button class="btn-link" id="viewAllCustomers">سب دیکھیں</button>
+      </div>
+      <div id="topCustomersList" class="recent-list">
+        <p class="empty-msg">لوڈ ہو رہا ہے...</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ PAGE: NEW BILL ============ -->
+  <div id="pageBill" class="page" style="display:none;">
+    <section class="card">
+      <div class="card-header">
+        <h2>📝 نیا بل بنائیں</h2>
+        <button class="btn-link" id="clearBillBtn">صاف کریں</button>
       </div>
 
       <div class="input-group customer-input-group">
@@ -93,7 +146,7 @@
 
       <div class="input-group">
         <span class="input-icon">📱</span>
-        <input type="tel" id="customerPhone" placeholder="واٹس ایپ نمبر (923001234567)">
+        <input type="tel" id="customerPhone" placeholder="واٹس ایپ نمبر (923001234567)" inputmode="numeric">
       </div>
 
       <div class="balance-card" id="prevBalanceCard">
@@ -102,29 +155,35 @@
       </div>
 
       <div class="section-title">
-        <span>آئٹمز (کسٹمر نے کیا لیا)</span>
+        <span>🛒 آئٹمز (کسٹمر نے کیا لیا)</span>
         <button type="button" id="addItemBtn" class="btn-mini">+ نیا آئٹم</button>
       </div>
       <div id="itemsContainer"></div>
 
       <div class="input-group">
         <span class="input-icon">💰</span>
-        <input type="number" id="billAmount" placeholder="کل ادھار رقم (اس بل کی)" value="0">
+        <input type="number" id="billAmount" placeholder="کل ادھار رقم (اس بل کی)" value="" inputmode="numeric">
       </div>
 
       <div class="input-group">
         <span class="input-icon">💵</span>
-        <input type="number" id="paymentAmount" placeholder="ادائیگی (اگر کی ہو)" value="0">
+        <input type="number" id="paymentAmount" placeholder="وصولی / ادائیگی (اگر کی ہو)" value="" inputmode="numeric">
       </div>
 
-      <button id="generateBillBtn" class="btn-primary">بل بنائیں</button>
+      <button id="generateBillBtn" class="btn-primary btn-large">
+        <span>🧾</span> بل بنائیں
+      </button>
     </section>
 
     <section id="billPreviewWrapper" class="card" style="display:none;">
+      <div class="card-header">
+        <h2>🧾 بل کا پیش نظارہ</h2>
+      </div>
       <div id="billPreview"></div>
       <div class="action-row">
         <button id="shareWhatsappBtn" class="btn-whatsapp">📲 واٹس ایپ پر بھیجیں</button>
-        <button id="newBillBtn" class="btn-secondary">نیا بل</button>
+        <button id="printBillBtn" class="btn-secondary">🖨️ پرنٹ کریں</button>
+        <button id="newBillBtn" class="btn-secondary">🔄 نیا بل</button>
       </div>
     </section>
   </div>
@@ -133,27 +192,154 @@
   <div id="pageCustomers" class="page" style="display:none;">
     <section class="card">
       <div class="card-header">
-        <h2>کسٹمرز</h2>
-        <input type="text" id="searchCustomer" class="search-input" placeholder="🔍 تلاش کریں...">
+        <h2>👥 کسٹمرز کی فہرست</h2>
       </div>
+
+      <div class="input-group">
+        <span class="input-icon">🔍</span>
+        <input type="text" id="searchCustomer" class="search-input" placeholder="نام یا فون سے تلاش کریں..." autocomplete="off">
+      </div>
+
+      <div class="filter-row">
+        <button class="filter-chip active" data-filter="all">سب</button>
+        <button class="filter-chip" data-filter="credit">بقایا والے</button>
+        <button class="filter-chip" data-filter="advance">ایڈوانس والے</button>
+        <button class="filter-chip" data-filter="clear">صاف حساب</button>
+      </div>
+
+      <div class="sort-row">
+        <label>ترتیب:</label>
+        <select id="sortCustomers" class="sort-select">
+          <option value="name">نام (A-Z)</option>
+          <option value="balance-high">زیادہ بقایا پہلے</option>
+          <option value="balance-low">کم بقایا پہلے</option>
+          <option value="recent">حالیہ لین دین</option>
+        </select>
+      </div>
+
       <div id="customersList" class="customers-list">
         <p class="empty-msg">لوڈ ہو رہا ہے...</p>
       </div>
     </section>
   </div>
 
+  <!-- ============ PAGE: REPORTS ============ -->
+  <div id="pageReports" class="page" style="display:none;">
+    <section class="card">
+      <div class="card-header">
+        <h2>📊 رپورٹس</h2>
+      </div>
+
+      <div class="filter-row">
+        <button class="filter-chip active" data-report="today">آج</button>
+        <button class="filter-chip" data-report="week">اس ہفتے</button>
+        <button class="filter-chip" data-report="month">اس مہینے</button>
+        <button class="filter-chip" data-report="all">سب</button>
+      </div>
+
+      <div class="report-stats">
+        <div class="report-stat-row">
+          <span>کل ادھار:</span>
+          <strong id="reportTotalCredit">₨ 0</strong>
+        </div>
+        <div class="report-stat-row">
+          <span>کل وصولی:</span>
+          <strong id="reportTotalPayment" style="color:#25D366;">₨ 0</strong>
+        </div>
+        <div class="report-stat-row">
+          <span>نیٹ بیلنس:</span>
+          <strong id="reportNetBalance">₨ 0</strong>
+        </div>
+        <div class="report-stat-row">
+          <span>کل لین دین:</span>
+          <strong id="reportTotalTxns">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>📋 تفصیلی لین دین</h2>
+      </div>
+      <div id="reportTransactionsList" class="recent-list">
+        <p class="empty-msg">لوڈ ہو رہا ہے...</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ PAGE: SETTINGS ============ -->
+  <div id="pageSettings" class="page" style="display:none;">
+    <section class="card">
+      <div class="card-header">
+        <h2>🏪 دکان کی معلومات</h2>
+      </div>
+
+      <div class="input-group">
+        <span class="input-icon">🏪</span>
+        <input type="text" id="settingShopName" placeholder="دکان کا نام">
+      </div>
+
+      <div class="input-group">
+        <span class="input-icon">📞</span>
+        <input type="tel" id="settingShopPhone" placeholder="دکان کا نمبر">
+      </div>
+
+      <div class="input-group">
+        <span class="input-icon">📍</span>
+        <input type="text" id="settingShopAddress" placeholder="پتہ (اختیاری)">
+      </div>
+
+      <div class="input-group">
+        <span class="input-icon">📝</span>
+        <input type="text" id="settingBillNote" placeholder="بل کے آخر میں نوٹ">
+      </div>
+
+      <button id="saveSettingsBtn" class="btn-primary">💾 محفوظ کریں</button>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>📤 ڈیٹا مینجمنٹ</h2>
+      </div>
+
+      <button id="exportDataBtn" class="btn-secondary">📥 ڈیٹا ایکسپورٹ کریں (JSON)</button>
+      <button id="refreshDataBtn" class="btn-secondary">🔄 ڈیٹا ریفریش کریں</button>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>ℹ️ ایپ کے بارے میں</h2>
+      </div>
+
+      <div class="about-row">
+        <span>ورژن:</span>
+        <strong>3.0.0 PRO</strong>
+      </div>
+      <div class="about-row">
+        <span>اکاؤنٹ:</span>
+        <strong id="aboutUserEmail">—</strong>
+      </div>
+      <div class="about-row">
+        <span>آخری لاگ ان:</span>
+        <strong id="aboutLastLogin">—</strong>
+      </div>
+
+      <button id="logoutBtn2" class="btn-danger">🚪 لاگ آؤٹ</button>
+    </section>
+  </div>
+
   <!-- ============ CUSTOMER DETAIL MODAL ============ -->
   <div id="customerModal" class="modal" style="display:none;">
-    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="modal-overlay" data-close="customerModal"></div>
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="modalCustomerName">کسٹمر</h3>
-        <button id="closeModalBtn" class="close-btn">✕</button>
+        <button class="close-btn" data-close="customerModal">✕</button>
       </div>
       <div class="modal-body">
         <div class="modal-stat-row">
           <div class="modal-stat">
-            <div class="modal-stat-label">فون</div>
+            <div class="modal-stat-label">📱 فون</div>
             <div class="modal-stat-value" id="modalPhone">—</div>
           </div>
           <div class="modal-stat">
@@ -161,7 +347,14 @@
             <div class="modal-stat-value" id="modalBalance">₨ 0</div>
           </div>
         </div>
-        <h4 class="modal-section-title">لین دین کی تاریخ</h4>
+
+        <div class="modal-actions">
+          <button id="modalNewBillBtn" class="btn-primary btn-small">📝 نیا بل</button>
+          <button id="modalPaymentBtn" class="btn-whatsapp btn-small">💵 وصولی</button>
+          <button id="modalCallBtn" class="btn-secondary btn-small">📞 کال</button>
+        </div>
+
+        <h4 class="modal-section-title">📋 لین دین کی تاریخ</h4>
         <div id="transactionsList" class="transactions-list">
           <p class="empty-msg">کوئی لین دین نہیں</p>
         </div>
@@ -169,11 +362,59 @@
     </div>
   </div>
 
+  <!-- ============ PAYMENT / WASOOLI MODAL ============ -->
+  <div id="paymentModal" class="modal" style="display:none;">
+    <div class="modal-overlay" data-close="paymentModal"></div>
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h3>💵 وصولی درج کریں</h3>
+        <button class="close-btn" data-close="paymentModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group">
+          <span class="input-icon">💰</span>
+          <input type="number" id="paymentModalAmount" placeholder="رقم لکھیں" inputmode="numeric">
+        </div>
+        <div class="input-group">
+          <span class="input-icon">📝</span>
+          <input type="text" id="paymentModalNote" placeholder="نوٹ (اختیاری)">
+        </div>
+        <button id="paymentModalSaveBtn" class="btn-primary">وصولی محفوظ کریں</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TRANSACTIONS MODAL ============ -->
+  <div id="transactionsModal" class="modal" style="display:none;">
+    <div class="modal-overlay" data-close="transactionsModal"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📋 تمام لین دین</h3>
+        <button class="close-btn" data-close="transactionsModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="allTransactionsList" class="transactions-list">
+          <p class="empty-msg">لوڈ ہو رہا ہے...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOASTS & LOADING -->
+  <div id="toastContainer" class="toast-container"></div>
+  <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+    <div class="spinner"></div>
+    <p id="loadingText">لوڈ ہو رہا ہے...</p>
+  </div>
 </div>
 
 <!-- ============ BOTTOM NAVIGATION ============ -->
 <nav id="bottomNav" class="bottom-nav" style="display:none;">
-  <button class="nav-item active" data-page="bill">
+  <button class="nav-item active" data-page="dashboard">
+    <span class="nav-icon">🏠</span>
+    <span class="nav-label">ڈیش بورڈ</span>
+  </button>
+  <button class="nav-item" data-page="bill">
     <span class="nav-icon">📝</span>
     <span class="nav-label">نیا بل</span>
   </button>
@@ -181,8 +422,16 @@
     <span class="nav-icon">👥</span>
     <span class="nav-label">کسٹمرز</span>
   </button>
+  <button class="nav-item" data-page="reports">
+    <span class="nav-icon">📊</span>
+    <span class="nav-label">رپورٹس</span>
+  </button>
+  <button class="nav-item" data-page="settings">
+    <span class="nav-icon">⚙️</span>
+    <span class="nav-label">سیٹنگز</span>
+  </button>
 </nav>
 
 <script type="module" src="app.js"></script>
 </body>
-</html>
+        </html>
