@@ -1,11 +1,11 @@
 import { db, auth } from './firebase-config.js';
 import {
   collection, addDoc, getDocs, query, where, limit, doc, updateDoc
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ⚠️ اپنی دکان کی معلومات یہاں لکھیں
 const SHOP_NAME = "Ktk Store";
@@ -41,19 +41,17 @@ const totalOutstandingEl = document.getElementById('totalOutstanding');
 
 let previousBalance = 0;
 let lastBillData = null;
-let authMode = 'login'; // 'login' یا 'signup'
 
 // ============ Tab Switch ============
 tabLogin.addEventListener('click', () => {
-  authMode = 'login';
   tabLogin.classList.add('active');
   tabSignup.classList.remove('active');
   loginBtn.style.display = 'block';
   signupBtn.style.display = 'none';
   loginError.textContent = '';
 });
+
 tabSignup.addEventListener('click', () => {
-  authMode = 'signup';
   tabSignup.classList.add('active');
   tabLogin.classList.remove('active');
   loginBtn.style.display = 'none';
@@ -61,7 +59,7 @@ tabSignup.addEventListener('click', () => {
   loginError.textContent = '';
 });
 
-// ============ Login / Signup ============
+// ============ Login ============
 loginBtn.addEventListener('click', async () => {
   loginError.textContent = '';
   const email = loginEmail.value.trim();
@@ -82,6 +80,7 @@ loginBtn.addEventListener('click', async () => {
   loginBtn.disabled = false;
 });
 
+// ============ Signup ============
 signupBtn.addEventListener('click', async () => {
   loginError.textContent = '';
   const email = loginEmail.value.trim();
@@ -97,13 +96,14 @@ signupBtn.addEventListener('click', async () => {
   } catch (e) {
     loginError.textContent = e.code === 'auth/email-already-in-use'
       ? 'یہ ای میل پہلے سے موجود ہے'
-      : 'اکاؤنٹ بنانے میں مسئلہ: ' + e.message;
+      : 'مسئلہ: ' + e.message;
     console.error(e);
   }
   signupBtn.textContent = 'نیا اکاؤنٹ بنائیں';
   signupBtn.disabled = false;
 });
 
+// ============ Logout ============
 logoutBtn.addEventListener('click', async () => {
   if (confirm('کیا آپ واقعی لاگ آؤٹ کرنا چاہتے ہیں؟')) {
     await signOut(auth);
@@ -126,47 +126,59 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-// ============ Load customer names ============
+// ============ Customer names list ============
 async function loadCustomerNames() {
   customerNamesList.innerHTML = '';
-  const snap = await getDocs(collection(db, "customers"));
-  snap.forEach((d) => {
-    const opt = document.createElement('option');
-    opt.value = d.data().name;
-    customerNamesList.appendChild(opt);
-  });
+  try {
+    const snap = await getDocs(collection(db, "customers"));
+    snap.forEach((d) => {
+      const opt = document.createElement('option');
+      opt.value = d.data().name;
+      customerNamesList.appendChild(opt);
+    });
+  } catch (e) {
+    console.error(e);
+  }
 }
 
-// ============ Load stats ============
+// ============ Stats ============
 async function loadStats() {
-  const snap = await getDocs(collection(db, "customers"));
-  let total = 0;
-  let outstanding = 0;
-  snap.forEach((d) => {
-    total++;
-    outstanding += Number(d.data().balance) || 0;
-  });
-  totalCustomersEl.textContent = total;
-  totalOutstandingEl.textContent = '₨ ' + outstanding.toLocaleString();
+  try {
+    const snap = await getDocs(collection(db, "customers"));
+    let total = 0;
+    let outstanding = 0;
+    snap.forEach((d) => {
+      total++;
+      outstanding += Number(d.data().balance) || 0;
+    });
+    totalCustomersEl.textContent = total;
+    totalOutstandingEl.textContent = '₨ ' + outstanding.toLocaleString();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ============ Auto-load previous balance ============
 customerName.addEventListener('change', async () => {
   const name = customerName.value.trim();
   if (!name) return;
-  const q = query(collection(db, "customers"), where("name", "==", name), limit(1));
-  const snap = await getDocs(q);
-  if (!snap.empty) {
-    const data = snap.docs[0].data();
-    previousBalance = data.balance || 0;
-    customerPhone.value = data.phone || '';
-  } else {
-    previousBalance = 0;
+  try {
+    const q = query(collection(db, "customers"), where("name", "==", name), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const data = snap.docs[0].data();
+      previousBalance = data.balance || 0;
+      customerPhone.value = data.phone || '';
+    } else {
+      previousBalance = 0;
+    }
+    previousBalanceEl.textContent = previousBalance.toLocaleString();
+  } catch (e) {
+    console.error(e);
   }
-  previousBalanceEl.textContent = previousBalance.toLocaleString();
 });
 
-// ============ Item rows ============
+// ============ Add item row ============
 function addItemRow() {
   const row = document.createElement('div');
   row.className = 'item-row';
@@ -187,7 +199,10 @@ generateBillBtn.addEventListener('click', async () => {
   const phone = customerPhone.value.trim();
   const payment = Number(paymentAmount.value) || 0;
 
-  if (!name) return alert('کسٹمر کا نام لکھیں');
+  if (!name) {
+    alert('کسٹمر کا نام لکھیں');
+    return;
+  }
 
   const items = [];
   document.querySelectorAll('.item-row').forEach((row) => {
@@ -211,11 +226,11 @@ generateBillBtn.addEventListener('click', async () => {
       customerName: name,
       customerPhone: phone,
       date: billDate,
-      items,
-      previousBalance,
-      billTotal,
-      payment,
-      currentBalance,
+      items: items,
+      previousBalance: previousBalance,
+      billTotal: billTotal,
+      payment: payment,
+      currentBalance: currentBalance,
       userEmail: auth.currentUser.email
     });
 
@@ -228,11 +243,17 @@ generateBillBtn.addEventListener('click', async () => {
       });
     } else {
       await addDoc(collection(db, "customers"), {
-        name, phone, balance: currentBalance, createdAt: billDate
+        name: name,
+        phone: phone,
+        balance: currentBalance,
+        createdAt: billDate
       });
     }
 
-    lastBillData = { name, phone, items, previousBalance, billTotal, payment, currentBalance, date: billDate };
+    lastBillData = {
+      name, phone, items, previousBalance, billTotal, payment,
+      currentBalance, date: billDate
+    };
     renderBillPreview(lastBillData);
     loadCustomerNames();
     loadStats();
@@ -317,7 +338,6 @@ shareWhatsappBtn.addEventListener('click', async () => {
         if (err.name !== 'AbortError') console.log('Share error', err);
       }
     } else {
-      // Fallback: ڈاؤن لوڈ + WhatsApp link
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -337,7 +357,7 @@ shareWhatsappBtn.addEventListener('click', async () => {
   }
 
   shareWhatsappBtn.disabled = false;
-  shareWhatsappBtn.innerHTML = 'واٹس ایپ پر بھیجیں';
+  shareWhatsappBtn.textContent = '📲 واٹس ایپ پر بھیجیں';
 });
 
 // ============ New bill ============
