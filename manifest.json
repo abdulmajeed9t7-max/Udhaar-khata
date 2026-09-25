@@ -1,0 +1,21 @@
+{
+  "name": "ادھار کھاتہ - Ktk Store",
+  "short_name": "ادھار کھاتہ",
+  "description": "اپنی دکان کا حساب کتاب آسانی سے رکھیں",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1877F2",
+  "theme_color": "#1877F2",
+  "lang": "ur",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
