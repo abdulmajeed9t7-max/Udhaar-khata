@@ -1,6 +1,6 @@
 import { db, auth } from './firebase-config.js';
 import {
-  collection, addDoc, getDocs, query, where, limit, doc, updateDoc, orderBy
+  collection, addDoc, getDocs, query, where, limit, doc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -12,11 +12,11 @@ const SHOP_NAME = "Ktk Store";
 const SHOP_PHONE = "0300-1234567";
 const BILL_NOTE = "ادھار کی صورت میں بل ضرور لیں — شکریہ";
 
-// ============ PWA: Service Worker Register ============
+// ============ PWA ============
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js')
-      .then((reg) => console.log('SW registered:', reg.scope))
+      .then((reg) => console.log('SW registered'))
       .catch((err) => console.log('SW fail:', err));
   });
 }
@@ -40,18 +40,19 @@ const pageCustomers = document.getElementById('pageCustomers');
 
 const customerName = document.getElementById('customerName');
 const customerPhone = document.getElementById('customerPhone');
+const customerSuggestions = document.getElementById('customerSuggestions');
 const previousBalanceEl = document.getElementById('previousBalance');
 const prevBalanceCard = document.getElementById('prevBalanceCard');
 const prevBalanceLabel = document.getElementById('prevBalanceLabel');
 const itemsContainer = document.getElementById('itemsContainer');
 const addItemBtn = document.getElementById('addItemBtn');
+const billAmountInput = document.getElementById('billAmount');
 const paymentAmount = document.getElementById('paymentAmount');
 const generateBillBtn = document.getElementById('generateBillBtn');
 const billPreviewWrapper = document.getElementById('billPreviewWrapper');
 const billPreview = document.getElementById('billPreview');
 const shareWhatsappBtn = document.getElementById('shareWhatsappBtn');
 const newBillBtn = document.getElementById('newBillBtn');
-const customerNamesList = document.getElementById('customerNames');
 const totalCustomersEl = document.getElementById('totalCustomers');
 const totalOutstandingEl = document.getElementById('totalOutstanding');
 const totalCard = document.getElementById('totalCard');
@@ -86,7 +87,18 @@ function balanceInfo(balance) {
   return { label: 'بقایا', value: b, className: 'credit' };
 }
 
-// ============ Tab Switch (Login/Signup) ============
+function updatePrevBalanceUI() {
+  const info = balanceInfo(previousBalance);
+  previousBalanceEl.textContent = formatMoney(info.value);
+  prevBalanceLabel.textContent = 'پچھلا ' + info.label;
+  if (info.className === 'advance') {
+    prevBalanceCard.classList.add('advance');
+  } else {
+    prevBalanceCard.classList.remove('advance');
+  }
+}
+
+// ============ Tab Switch ============
 tabLogin.addEventListener('click', () => {
   tabLogin.classList.add('active');
   tabSignup.classList.remove('active');
@@ -167,7 +179,7 @@ onAuthStateChanged(auth, (user) => {
 });
 
 async function refreshAll() {
-  await loadCustomerNames();
+  await loadCustomersCache();
   await loadStats();
   await loadCustomersList();
 }
@@ -190,16 +202,13 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   });
 });
 
-// ============ Load customer names (datalist) ============
-async function loadCustomerNames() {
-  customerNamesList.innerHTML = '';
+// ============ Load customers cache ============
+async function loadCustomersCache() {
   try {
     const snap = await getDocs(collection(db, "customers"));
-    snap.forEach((d) => {
-      const opt = document.createElement('option');
-      opt.value = d.data().name;
-      customerNamesList.appendChild(opt);
-    });
+    allCustomers = [];
+    snap.forEach((d) => allCustomers.push({ id: d.id, ...d.data() }));
+    allCustomers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   } catch (e) { console.error(e); }
 }
 
@@ -207,8 +216,7 @@ async function loadCustomerNames() {
 async function loadStats() {
   try {
     const snap = await getDocs(collection(db, "customers"));
-    let total = 0;
-    let outstanding = 0;
+    let total = 0, outstanding = 0;
     snap.forEach((d) => {
       total++;
       outstanding += Number(d.data().balance) || 0;
@@ -229,18 +237,8 @@ async function loadStats() {
 // ============ Load customers list ============
 async function loadCustomersList() {
   customersListEl.innerHTML = '<p class="empty-msg">لوڈ ہو رہا ہے...</p>';
-  try {
-    const snap = await getDocs(collection(db, "customers"));
-    allCustomers = [];
-    snap.forEach((d) => {
-      allCustomers.push({ id: d.id, ...d.data() });
-    });
-    allCustomers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    renderCustomersList(allCustomers);
-  } catch (e) {
-    console.error(e);
-    customersListEl.innerHTML = '<p class="empty-msg">لوڈ کرنے میں مسئلہ ہوا</p>';
-  }
+  await loadCustomersCache();
+  renderCustomersList(allCustomers);
 }
 
 function renderCustomersList(list) {
@@ -268,21 +266,95 @@ function renderCustomersList(list) {
   });
 }
 
-// Search filter
 searchCustomer.addEventListener('input', () => {
   const q = searchCustomer.value.trim().toLowerCase();
-  if (!q) {
-    renderCustomersList(allCustomers);
-    return;
-  }
+  if (!q) { renderCustomersList(allCustomers); return; }
   const filtered = allCustomers.filter((c) =>
-    (c.name || '').toLowerCase().includes(q) ||
-    (c.phone || '').includes(q)
+    (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
   );
   renderCustomersList(filtered);
 });
 
-// ============ Customer Detail Modal ============
+// ============ Customer Suggestions (Live Search) ============
+function renderSuggestions(matches, exactMatch) {
+  customerSuggestions.innerHTML = '';
+
+  if (matches.length === 0 && !exactMatch) {
+    // کوئی میچ نہیں — نیا کسٹمر بنانے کا آپشن
+    const newDiv = document.createElement('div');
+    newDiv.className = 'suggestion-new';
+    newDiv.textContent = '➕ نیا کسٹمر بنائیں: ' + customerName.value.trim();
+    newDiv.addEventListener('click', () => {
+      hideSuggestions();
+      // نام وہی رہنے دیں، باقی صارف بھرے گا
+    });
+    customerSuggestions.appendChild(newDiv);
+    customerSuggestions.style.display = 'block';
+    return;
+  }
+
+  matches.forEach((c) => {
+    const info = balanceInfo(c.balance);
+    const div = document.createElement('div');
+    div.className = 'suggestion-item';
+    div.innerHTML = `
+      <div class="suggestion-name">${c.name}</div>
+      <div class="suggestion-balance ${info.className}">${info.label}: ₨ ${formatMoney(info.value)}</div>
+    `;
+    div.addEventListener('click', () => {
+      customerName.value = c.name;
+      customerPhone.value = c.phone || '';
+      previousBalance = Number(c.balance) || 0;
+      updatePrevBalanceUI();
+      hideSuggestions();
+    });
+    customerSuggestions.appendChild(div);
+  });
+
+  customerSuggestions.style.display = 'block';
+}
+
+function hideSuggestions() {
+  customerSuggestions.style.display = 'none';
+  customerSuggestions.innerHTML = '';
+}
+
+customerName.addEventListener('input', () => {
+  const q = customerName.value.trim().toLowerCase();
+  if (q.length < 1) {
+    hideSuggestions();
+    previousBalance = 0;
+    updatePrevBalanceUI();
+    return;
+  }
+  const matches = allCustomers.filter((c) =>
+    (c.name || '').toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  const exactMatch = allCustomers.find((c) =>
+    (c.name || '').toLowerCase() === q
+  );
+
+  if (exactMatch && matches.length === 1) {
+    // بالکل وہی نام — خودکار bhro
+    previousBalance = Number(exactMatch.balance) || 0;
+    customerPhone.value = exactMatch.phone || '';
+    updatePrevBalanceUI();
+    hideSuggestions();
+    return;
+  }
+
+  renderSuggestions(matches, exactMatch);
+});
+
+// کلک آؤٹ سائیڈ پر suggestions بند
+document.addEventListener('click', (e) => {
+  if (!customerName.contains(e.target) && !customerSuggestions.contains(e.target)) {
+    hideSuggestions();
+  }
+});
+
+// ============ Customer Modal ============
 async function openCustomerModal(customer) {
   modalCustomerName.textContent = customer.name || 'کسٹمر';
   modalPhone.textContent = customer.phone || '—';
@@ -294,14 +366,10 @@ async function openCustomerModal(customer) {
 
   customerModal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
-
   transactionsList.innerHTML = '<p class="empty-msg">لوڈ ہو رہا ہے...</p>';
 
   try {
-    const q = query(
-      collection(db, "transactions"),
-      where("customerName", "==", customer.name)
-    );
+    const q = query(collection(db, "transactions"), where("customerName", "==", customer.name));
     const snap = await getDocs(q);
     const txns = [];
     snap.forEach((d) => txns.push(d.data()));
@@ -354,45 +422,13 @@ function closeModal() {
 closeModalBtn.addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', closeModal);
 
-// ============ Auto-load previous balance ============
-customerName.addEventListener('change', async () => {
-  const name = customerName.value.trim();
-  if (!name) {
-    previousBalance = 0;
-    prevBalanceCard.classList.remove('advance');
-    prevBalanceLabel.textContent = 'پچھلا بقایا';
-    previousBalanceEl.textContent = '0';
-    return;
-  }
-  try {
-    const q = query(collection(db, "customers"), where("name", "==", name), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const data = snap.docs[0].data();
-      previousBalance = data.balance || 0;
-      customerPhone.value = data.phone || '';
-    } else {
-      previousBalance = 0;
-    }
-    const info = balanceInfo(previousBalance);
-    previousBalanceEl.textContent = formatMoney(info.value);
-    prevBalanceLabel.textContent = 'پچھلا ' + info.label;
-    if (info.className === 'advance') {
-      prevBalanceCard.classList.add('advance');
-    } else {
-      prevBalanceCard.classList.remove('advance');
-    }
-  } catch (e) { console.error(e); }
-});
-
-// ============ Add item row ============
+// ============ Add item row (بدون ریٹ) ============
 function addItemRow() {
   const row = document.createElement('div');
   row.className = 'item-row';
   row.innerHTML = `
-    <input type="text" placeholder="آئٹم" class="item-name">
+    <input type="text" placeholder="آئٹم کا نام" class="item-name">
     <input type="number" placeholder="تعداد" class="item-qty" value="1" min="0" step="any">
-    <input type="number" placeholder="ریٹ" class="item-rate" step="any">
     <button type="button" class="remove-btn">×</button>
   `;
   row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
@@ -404,6 +440,7 @@ addItemBtn.addEventListener('click', addItemRow);
 generateBillBtn.addEventListener('click', async () => {
   const name = customerName.value.trim();
   const phone = customerPhone.value.trim();
+  const billAmount = Number(billAmountInput.value) || 0;
   const payment = Number(paymentAmount.value) || 0;
 
   if (!name) { alert('کسٹمر کا نام لکھیں'); return; }
@@ -412,19 +449,17 @@ generateBillBtn.addEventListener('click', async () => {
   document.querySelectorAll('.item-row').forEach((row) => {
     const itemName = row.querySelector('.item-name').value.trim();
     const qty = Number(row.querySelector('.item-qty').value) || 0;
-    const rate = Number(row.querySelector('.item-rate').value) || 0;
-    if (itemName && qty > 0 && rate > 0) {
-      items.push({ name: itemName, qty, rate, amount: qty * rate });
+    if (itemName && qty > 0) {
+      items.push({ name: itemName, qty });
     }
   });
 
-  if (items.length === 0 && payment === 0) {
-    alert('کوئی آئٹم یا ادائیگی درج کریں');
+  if (billAmount === 0 && payment === 0) {
+    alert('ادھار رقم یا ادائیگی درج کریں');
     return;
   }
 
-  const billTotal = items.reduce((s, i) => s + i.amount, 0);
-  const currentBalance = previousBalance + billTotal - payment;
+  const currentBalance = previousBalance + billAmount - payment;
   const billDate = new Date();
 
   generateBillBtn.textContent = 'محفوظ ہو رہا ہے...';
@@ -437,7 +472,7 @@ generateBillBtn.addEventListener('click', async () => {
       date: billDate,
       items,
       previousBalance,
-      billTotal,
+      billTotal: billAmount,
       payment,
       currentBalance,
       userEmail: auth.currentUser.email
@@ -457,13 +492,11 @@ generateBillBtn.addEventListener('click', async () => {
     }
 
     lastBillData = {
-      name, phone, items, previousBalance, billTotal,
-      payment, currentBalance, date: billDate
+      name, phone, items, previousBalance,
+      billTotal: billAmount, payment, currentBalance, date: billDate
     };
     renderBillPreview(lastBillData);
-    loadCustomerNames();
-    loadStats();
-    loadCustomersList();
+    await refreshAll();
   } catch (e) {
     console.error(e);
     alert('محفوظ کرنے میں مسئلہ: ' + e.message);
@@ -482,8 +515,6 @@ function renderBillPreview(data) {
     <tr>
       <td>${it.name}</td>
       <td>${it.qty}</td>
-      <td>${formatMoney(it.rate)}</td>
-      <td>${formatMoney(it.amount)}</td>
     </tr>
   `).join('');
 
@@ -502,10 +533,10 @@ function renderBillPreview(data) {
     </div>
     <table>
       <thead>
-        <tr><th>آئٹم</th><th>تعداد</th><th>ریٹ</th><th>رقم</th></tr>
+        <tr><th>آئٹم</th><th>تعداد</th></tr>
       </thead>
       <tbody>
-        ${itemsHTML || '<tr><td colspan="4" style="color:#999;">کوئی آئٹم شامل نہیں</td></tr>'}
+        ${itemsHTML || '<tr><td colspan="2" style="color:#999;">کوئی آئٹم شامل نہیں</td></tr>'}
       </tbody>
     </table>
     <div class="summary">
@@ -571,15 +602,15 @@ shareWhatsappBtn.addEventListener('click', async () => {
 newBillBtn.addEventListener('click', () => {
   customerName.value = '';
   customerPhone.value = '';
-  previousBalanceEl.textContent = '0';
   previousBalance = 0;
-  prevBalanceLabel.textContent = 'پچھلا بقایا';
-  prevBalanceCard.classList.remove('advance');
+  updatePrevBalanceUI();
   itemsContainer.innerHTML = '';
   addItemRow();
+  billAmountInput.value = '0';
   paymentAmount.value = '0';
   billPreviewWrapper.style.display = 'none';
   lastBillData = null;
+  hideSuggestions();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
