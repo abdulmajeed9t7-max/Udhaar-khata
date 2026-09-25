@@ -1,4 +1,4 @@
-const CACHE_NAME = 'udhaar-khata-v1';
+const CACHE_NAME = 'udhaar-khata-v2';
 const ASSETS = [
   './',
   './index.html',
